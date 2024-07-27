@@ -73,4 +73,4 @@ def main(page: Page):
     )
 
 
-flet.app(target=main, upload_dir="assets/uploads",view=flet.FLET_APP)
+flet.app(target=main, upload_dir="assets/uploads",view=flet.FLET_APP_WEB)
