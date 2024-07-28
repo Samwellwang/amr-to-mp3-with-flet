@@ -1,3 +1,4 @@
 ffmpeg/bin/ffmpeg.exe filter=lfs diff=lfs merge=lfs -text
 ffmpeg/bin/ffplay.exe filter=lfs diff=lfs merge=lfs -text
 ffmpeg/bin/ffprobe.exe filter=lfs diff=lfs merge=lfs -text
+ffmpeg/bin/ffmpeg filter=lfs diff=lfs merge=lfs -text

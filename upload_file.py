@@ -7,19 +7,41 @@ import flet as ft
 from flet_core import FilePickerUploadFile, ElevatedButton, Ref
 import pcap_parser
 
-# 定义全局变量来存储 codec 和 result
-result = tuple()
 import os
-import sys
 import uuid
 
 from pydub import AudioSegment
 
 
+class FileResult:
+    def __init__(self):
+        self.filename = None
+        self.filesize = None
+        self.filetype = None
+        self.filename_without_extension = None
+
+
 def main(page: ft.Page):
     # 软件标题
-    page.title = "pacp 转化 3gp 音频"
+    page.window.width = 500
+    page.window.height = 300
+    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+    page.title = "转化AMR音频"
     os.environ["FLET_SECRET_KEY"] = os.urandom(12).hex()
+    result_file = FileResult()
+    menu_bar = ft.Row(
+        controls=[
+            ft.Text("文件(F)", style=ft.TextStyle(color="black", size=14)),
+            ft.Text("  操作(A)", style=ft.TextStyle(color="black", size=14)),
+            ft.Text("  查看(V)", style=ft.TextStyle(color="black", size=14)),
+            ft.Text("  帮助(H)", style=ft.TextStyle(color="black", size=14)),
+        ],
+        alignment=ft.MainAxisAlignment.START,
+        spacing=10
+    )
+    page.appbar = menu_bar
+
+    ####################
 
     def to_mp3(audio_file):
         # 加载3GA文件
@@ -27,10 +49,10 @@ def main(page: ft.Page):
         FFMPEG_PATH = os.path.join(os.getcwd(), "ffmpeg", "bin", "ffmpeg.exe")
         if not os.path.exists(FFMPEG_PATH):
             raise FileNotFoundError(FFMPEG_PATH)
+        os.environ["PATH"] += os.pathsep + os.path.dirname(FFMPEG_PATH)
         if not os.path.exists(audio_file):
             raise FileNotFoundError(audio_file)
         # # 配置 pydub 使用指定的 ffmpeg 路径
-        os.environ["PATH"] += os.pathsep + os.path.dirname(FFMPEG_PATH)
         audio = AudioSegment.from_file(audio_file)
         # # 导出为MP3文件
         uuid_str = str(uuid.uuid4())
@@ -41,12 +63,11 @@ def main(page: ft.Page):
     # upload_button.current.disabled = False
     # 上传完文件的结果
     def pick_files_result(e: ft.FilePickerResultEvent):
-        global result
         # 上传完文件的结果
         selected_files.value = (
             ", ".join(map(lambda f: f.name, e.files)) if e.files else "上传取消!"
         )
-        if not len(e.files):
+        if not e or not e.files:
             return
         file = e.files[0]
         print(file.name, file.size, file.path)
@@ -54,20 +75,8 @@ def main(page: ft.Page):
         # 开始转换
         packets = pcap_parser.rdpcap(file.path)  # read packets from pcap or pcapng file
         codec = pcap_parser.guessCodec(packets, 'ietf')
-        result = (packets, codec,)
-
-    def save_files_result(e: ft.FilePickerResultEvent):
-        # 保存文件结果
-        print(e.path)
-        file_path = e.path + '.mp3'  # 创建完整文件路径
-        if not result:
-            print("Empty or invalid input file (not mp3?)")
-            return
-        codec = result[1]
-        packets = result[0]
         num_frames = 0
         seq = -1
-        temp_file_path = None
         num_valid_frames = 0  # Number of frames of the first RTP flow in the trace. Should be the same as num_frames if there is only one RTP flow in the trace
         with tempfile.NamedTemporaryFile(suffix=".3ga", dir="./assets", mode="wb", delete=False) as ofile:
             temp_file_path = ofile.name
@@ -98,49 +107,86 @@ def main(page: ft.Page):
                     else:
                         pcap_parser.storePayloadIu(ofile, codec, rtp.load)
         print("转化3ga完成")
-        mp3_file = to_mp3(ofile.name)
-        # 移动文件mp3_file到 file_path
-        shutil.move(os.path.join("assets", mp3_file + ".mp3", ), file_path)
+        mp3_result = to_mp3(temp_file_path)
+        print("转换MP3完成")
+        result_file.filename = mp3_result
         # 删除临时文件
         if temp_file_path and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
+
+    def save_files_result(e: ft.FilePickerResultEvent):
+        # 保存文件结果
+        print(e.path)
+        file_path = e.path + '.mp3'  # 创建完整文件路径
+        # 移动文件mp3_file到 file_path
+        shutil.move(os.path.join("assets", result_file.filename + ".mp3", ), file_path)
         print("done")
 
-    # 第一行字
-    title = ft.Text()
-    title.value = "请上传文件 :"
     # 添加文件选择器
     pick_files_dialog = ft.FilePicker(on_result=pick_files_result)
     # 添加文件保存器
     save_file_dialog = ft.FilePicker(on_result=save_files_result)
-
     # 选择文件的结果
-    selected_files = ft.Text()
+    selected_files = ft.Text("转换结果")
     # 将文件选择器放到最上层
     page.overlay.append(pick_files_dialog)
     page.overlay.append(save_file_dialog)
 
     page.add(
         ft.Column(
-            [title,
-             ft.ElevatedButton(
-                 "上传文件",
-                 icon=ft.icons.UPLOAD_FILE,
-                 on_click=lambda _: pick_files_dialog.pick_files(
-                     allow_multiple=False,
-                     allowed_extensions=['pcap']
-                 ),
-             ), ft.ElevatedButton(
-                "保存文件",
-                icon=ft.icons.SAVE,
-                on_click=lambda _: save_file_dialog.save_file(
-                    allowed_extensions=['mp3']
+            controls=[
+                ft.Card(
+                    content=ft.Container(
+                        content=ft.Column(
+                            [
+                                ft.ListTile(
+                                    leading=ft.Icon(ft.icons.ALBUM_OUTLINED),
+                                    title=selected_files,
+                                ),
+                                ft.Row(
+                                    controls=[
+                                        ft.TextButton("播放", icon="PLAY_ARROW"),
+                                        ft.TextButton(
+                                            text="保存文件",
+                                            icon=ft.icons.SAVE,
+                                            on_click=lambda _: save_file_dialog.save_file(
+                                                allowed_extensions=['mp3']),
+                                        )],
+                                    alignment=ft.MainAxisAlignment.END,
+                                ),
+                            ]
+                        ),
+                        width=400,
+                        height=100,
+                        padding=10,
+                    )
                 ),
-            ),
-             selected_files,
-             ]
-        )
+                ft.CupertinoButton(
+                    bgcolor=ft.colors.RED,
+                    content=ft.Text("上传文件"),
+                    opacity_on_click=0.3,
+                    on_click=lambda _: pick_files_dialog.pick_files(
+                        allow_multiple=False,
+                        allowed_extensions=['pcap']
+                    ),
+                    height=50,
+                    width=400
+                ),
+                # ft.ElevatedButton(
+                #     "保存文件",
+                #     color="RED",
+                #     icon=ft.icons.SAVE,
+                #     icon_color="GREEN",
+                #     on_click=lambda _: save_file_dialog.save_file(
+                #         allowed_extensions=['mp3']
+                #     ),
+                # ),
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.END,
+            adaptive=True
+        ),
+
     )
 
 
-ft.app(target=main, assets_dir="assets", upload_dir="assets/uploads", view=ft.FLET_APP_WEB)
+ft.app(target=main, assets_dir="assets", view=ft.FLET_APP)
