@@ -2,6 +2,7 @@ import base64
 import os
 import shutil
 import tempfile
+from typing import Optional
 
 import flet as ft
 from flet_core import FilePickerUploadFile, ElevatedButton, Ref
@@ -72,9 +73,17 @@ def main(page: ft.Page):
         file = e.files[0]
         print(file.name, file.size, file.path)
         selected_files.update()
-        # 开始转换
-        packets = pcap_parser.rdpcap(file.path)  # read packets from pcap or pcapng file
-        codec = pcap_parser.guessCodec(packets, 'ietf')
+        try:
+            # 开始转换
+            packets = pcap_parser.rdpcap(file.path)  # read packets from pcap or pcapng file
+            codec = pcap_parser.guessCodec(packets, 'ietf')
+        except Exception as e:
+            print(e)
+            result_txt.value = "源格式异常"
+            result_txt.update()
+            display.value = "转换失败"
+            page.open(dlg)
+            return
         num_frames = 0
         seq = -1
         num_valid_frames = 0  # Number of frames of the first RTP flow in the trace. Should be the same as num_frames if there is only one RTP flow in the trace
@@ -109,6 +118,10 @@ def main(page: ft.Page):
         print("转化3ga完成")
         mp3_result = to_mp3(temp_file_path)
         print("转换MP3完成")
+        save_btn.disabled = False
+        save_btn.update()
+        result_txt.value = "转换成功"
+        result_txt.update()
         result_file.filename = mp3_result
         # 删除临时文件
         if temp_file_path and os.path.exists(temp_file_path):
@@ -121,6 +134,10 @@ def main(page: ft.Page):
         # 移动文件mp3_file到 file_path
         shutil.move(os.path.join("assets", result_file.filename + ".mp3", ), file_path)
         print("done")
+        result_txt.value = f"文件保存在{file_path}"
+        result_txt.update()
+        display.value = "保存成功"
+        page.open(dlg)
 
     # 添加文件选择器
     pick_files_dialog = ft.FilePicker(on_result=pick_files_result)
@@ -128,6 +145,21 @@ def main(page: ft.Page):
     save_file_dialog = ft.FilePicker(on_result=save_files_result)
     # 选择文件的结果
     selected_files = ft.Text("转换结果")
+    save_btn = ft.TextButton(
+        disabled=True,
+        text="保存文件",
+        icon=ft.icons.SAVE,
+        on_click=lambda _: save_file_dialog.save_file(
+            allowed_extensions=['mp3']),
+    )
+
+    ## 显示结果
+    result_txt = ft.Text("",weight=ft.FontWeight.BOLD)
+    display = ft.Text("default")
+    dlg = ft.AlertDialog(
+        title=display,
+    )
+
     # 将文件选择器放到最上层
     page.overlay.append(pick_files_dialog)
     page.overlay.append(save_file_dialog)
@@ -145,13 +177,9 @@ def main(page: ft.Page):
                                 ),
                                 ft.Row(
                                     controls=[
-                                        ft.TextButton("播放", icon="PLAY_ARROW"),
-                                        ft.TextButton(
-                                            text="保存文件",
-                                            icon=ft.icons.SAVE,
-                                            on_click=lambda _: save_file_dialog.save_file(
-                                                allowed_extensions=['mp3']),
-                                        )],
+                                        ft.TextButton("播放", icon="PLAY_ARROW",disabled=True),
+                                        save_btn
+                                    ],
                                     alignment=ft.MainAxisAlignment.END,
                                 ),
                             ]
@@ -172,20 +200,11 @@ def main(page: ft.Page):
                     height=50,
                     width=400
                 ),
-                # ft.ElevatedButton(
-                #     "保存文件",
-                #     color="RED",
-                #     icon=ft.icons.SAVE,
-                #     icon_color="GREEN",
-                #     on_click=lambda _: save_file_dialog.save_file(
-                #         allowed_extensions=['mp3']
-                #     ),
-                # ),
             ],
             horizontal_alignment=ft.CrossAxisAlignment.END,
             adaptive=True
         ),
-
+        result_txt
     )
 
 
