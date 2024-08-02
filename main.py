@@ -3,6 +3,8 @@ import os
 import shutil
 import sys
 import tempfile
+import traceback
+from pathlib import Path
 from typing import Optional
 
 import flet as ft
@@ -43,21 +45,12 @@ def main(page: ft.Page):
     )
     page.appbar = menu_bar
 
-    ####################
-    def get_ffmpeg_path():
-        if getattr(sys, 'frozen', False):
-            # 如果是打包后的exe文件
-            base_path = sys._MEIPASS
-            base_path = os.path.abspath(".")
-        else:
-            # 如果是正常的Python解释器
-            base_path = os.path.abspath(".")
-        return os.path.join(base_path, 'ffmpeg','bin', 'ffmpeg.exe')
     def to_mp3(audio_file):
         # 加载3GA文件
         # 设置 ffmpeg 可执行文件的路径
-        base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
-        FFMPEG_PATH = get_ffmpeg_path()
+        BASE_DIR = Path(__file__).resolve().parent
+        ASSETS_DIR = os.path.join(BASE_DIR, 'assets')
+        FFMPEG_PATH = os.path.join(ASSETS_DIR, "ffmpeg","bin", 'ffmpeg.exe')
         if not os.path.exists(FFMPEG_PATH):
             raise FileNotFoundError(FFMPEG_PATH)
         os.environ["PATH"] += os.pathsep + os.path.dirname(FFMPEG_PATH)
@@ -145,7 +138,8 @@ def main(page: ft.Page):
             if temp_file_path and os.path.exists(temp_file_path):
                 os.remove(temp_file_path)
         except Exception as e:
-            print_txt.value = "失败"+str(e)
+            print(traceback.format_exc())
+            print_txt.value = "失败" + str(e)
             print_txt.update()
 
     def save_files_result(e: ft.FilePickerResultEvent):
